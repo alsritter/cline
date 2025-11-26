@@ -1,10 +1,8 @@
-import type { Banner, BannerRules, BannersResponse } from "@shared/ClineBanner"
+import type { Banner, BannerRules } from "@shared/ClineBanner"
 import { isClineInternalTester } from "@shared/internal/account"
-import axios from "axios"
 import { ClineEnv } from "@/config"
 import type { Controller } from "@/core/controller"
 import { HostProvider } from "@/hosts/host-provider"
-import { getAxiosSettings } from "@/shared/net"
 import { AuthService } from "../auth/AuthService"
 import { Logger } from "../logging/Logger"
 
@@ -77,53 +75,10 @@ export class BannerService {
 	 * @returns Array of banners that match current environment
 	 */
 	public async fetchActiveBanners(forceRefresh = false): Promise<Banner[]> {
-		try {
-			// Return cached banners if still valid
-			const now = Date.now()
-			if (!forceRefresh && this._cachedBanners.length > 0 && now - this._lastFetchTime < this.CACHE_DURATION_MS) {
-				Logger.log("BannerService: Returning cached banners")
-				return this._cachedBanners
-			}
-
-			// Fetch from API
-			const url = new URL("/banners/v1/messages", this._baseUrl).toString()
-			Logger.log(`BannerService: Fetching banners from ${url}`)
-
-			const response = await axios.get<BannersResponse>(url, {
-				timeout: 10000, // 10 second timeout
-				headers: {
-					"Content-Type": "application/json",
-				},
-				...getAxiosSettings(),
-			})
-
-			if (!response.data?.data?.banners) {
-				Logger.log("BannerService: Invalid response format")
-				return []
-			}
-
-			const allBanners = response.data.data.banners
-			Logger.log(`BannerService: Received ${allBanners.length} banners from API`)
-
-			// Filter banners based on rules evaluation
-			const matchingBanners = []
-			for (const banner of allBanners) {
-				if (await this.evaluateBannerRules(banner)) {
-					matchingBanners.push(banner)
-				}
-			}
-			Logger.log(`BannerService: ${matchingBanners.length} banners match current environment`)
-
-			// Update cache
-			this._cachedBanners = matchingBanners
-			this._lastFetchTime = now
-
-			return matchingBanners
-		} catch (error) {
-			// Log error but don't throw - banner fetching shouldn't break the extension
-			Logger.error("BannerService: Error fetching banners", error)
-			return []
-		}
+		// Fork version: Disable remote banner fetching
+		// Return empty array to avoid unnecessary API calls
+		Logger.log("BannerService: Banner fetching disabled in fork version")
+		return []
 	}
 
 	/**

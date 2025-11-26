@@ -12,7 +12,17 @@ import { Controller } from ".."
  */
 export async function getAihubmixModels(_controller: Controller, _request: EmptyRequest): Promise<OpenRouterCompatibleModelInfo> {
 	try {
-		const response = await axios.get("https://aihubmix.com/call/mdl_info_platform?tag=coding", getAxiosSettings())
+		// Debug logging for proxy configuration
+		const httpProxy = process.env.http_proxy || process.env.HTTP_PROXY
+		const httpsProxy = process.env.https_proxy || process.env.HTTPS_PROXY
+		if (httpProxy || httpsProxy) {
+			console.log(`[AIhubmix] Using proxy - HTTP: ${httpProxy || "none"}, HTTPS: ${httpsProxy || "none"}`)
+		}
+
+		const url = "https://aihubmix.com/call/mdl_info_platform?tag=coding"
+		console.log(`[AIhubmix] Fetching models from: ${url}`)
+
+		const response = await axios.get(url, getAxiosSettings())
 
 		if (!response.data?.success || !Array.isArray(response.data?.data)) {
 			console.error("Invalid response from AIhubmix API:", response.data)
@@ -22,20 +32,23 @@ export async function getAihubmixModels(_controller: Controller, _request: Empty
 		const modelsArray = response.data.data as any[]
 		const modelsMap: Record<string, OpenRouterModelInfo> = {}
 
+		console.log(`Fetched ${modelsArray.length} AIhubmix models from API`)
+
 		for (const modelData of modelsArray) {
 			if (!modelData.model || typeof modelData.model !== "string") {
 				continue
 			}
 
+			// 将 modalities 和 features 字符串转换为数组
+			const modalities = (modelData.modalities || "").split(",").map((m: string) => m.trim())
+			const features = (modelData.features || "").split(",").map((f: string) => f.trim())
+
 			// 检查是否支持图像
 			const supportsImages =
-				modelData.modalities?.includes("vision") ||
-				modelData.modalities?.includes("image") ||
-				modelData.features?.includes("vision") ||
-				false
+				modalities.includes("vision") || modalities.includes("image") || features.includes("vision") || false
 
 			// 检查是否支持思维链
-			const supportsThinking = modelData.features?.includes("thinking") || false
+			const supportsThinking = features.includes("thinking") || false
 
 			// 检查是否支持缓存：cache_ratio 非1 或 读价与输入价不同
 			const pricing = modelData.pricing || {}

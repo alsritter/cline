@@ -6,12 +6,16 @@ The Cline extension exposes an API that can be used by other extensions. To use 
 2. Include `cline.d.ts` in your extension's compilation.
 3. Get access to the API with the following code:
 
-    ```ts
-    const clineExtension = vscode.extensions.getExtension<ClineAPI>("saoudrizwan.claude-dev")
+    ```typescript
+    import * as vscode from "vscode"
+    import type { ClineAPI } from "cline"
 
-    if (!clineExtension?.isActive) {
-    	throw new Error("Cline extension is not activated")
-    }
+    export function activate(context: vscode.ExtensionContext) {
+        const clineExtension = vscode.extensions.getExtension<ClineAPI>("alsritter.cline-fork")
+
+        if (!clineExtension?.isActive) {
+        	throw new Error("Cline extension is not activated")
+        }
 
     const cline = clineExtension.exports
 
@@ -37,11 +41,11 @@ The Cline extension exposes an API that can be used by other extensions. To use 
     }
     ```
 
-    **Note:** To ensure that the `saoudrizwan.claude-dev` extension is activated before your extension, add it to the `extensionDependencies` in your `package.json`:
+    **Note:** To ensure that the `alsritter.cline-fork` extension is activated before your extension, add it to the `extensionDependencies` in your `package.json`:
 
     ```json
     "extensionDependencies": [
-        "saoudrizwan.claude-dev"
+        "alsritter.cline-fork"
     ]
     ```
 

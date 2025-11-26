@@ -310,6 +310,16 @@ export const anthropicDefaultModelId: AnthropicModelId = "claude-sonnet-4-5-2025
 export const ANTHROPIC_MIN_THINKING_BUDGET = 1_024
 export const ANTHROPIC_MAX_THINKING_BUDGET = 6_000
 export const anthropicModels = {
+	"claude-sonnet-4.5": {
+		maxTokens: 8192,
+		contextWindow: 200_000,
+		supportsImages: true,
+		supportsPromptCache: true,
+		inputPrice: 3.0,
+		outputPrice: 15.0,
+		cacheWritesPrice: 3.75,
+		cacheReadsPrice: 0.3,
+	},
 	"claude-sonnet-4-5-20250929": {
 		maxTokens: 8192,
 		contextWindow: 200_000,
@@ -397,6 +407,16 @@ export const anthropicModels = {
 		contextWindow: 200_000,
 		supportsImages: true,
 
+		supportsPromptCache: true,
+		inputPrice: 3.0,
+		outputPrice: 15.0,
+		cacheWritesPrice: 3.75,
+		cacheReadsPrice: 0.3,
+	},
+	"claude-3-5-sonnet": {
+		maxTokens: 8192,
+		contextWindow: 200_000,
+		supportsImages: true,
 		supportsPromptCache: true,
 		inputPrice: 3.0,
 		outputPrice: 15.0,
@@ -874,6 +894,16 @@ export const vertexModels = {
 			supportsThinkingLevel: true,
 		},
 	},
+	"claude-sonnet-4.5": {
+		maxTokens: 8192,
+		contextWindow: 200_000,
+		supportsImages: true,
+		supportsPromptCache: true,
+		inputPrice: 3.0,
+		outputPrice: 15.0,
+		cacheWritesPrice: 3.75,
+		cacheReadsPrice: 0.3,
+	},
 	"claude-sonnet-4-5@20250929": {
 		maxTokens: 8192,
 		contextWindow: 200_000,
@@ -947,6 +977,16 @@ export const vertexModels = {
 			maxBudget: 64000,
 			outputPrice: 15.0,
 		},
+	},
+	"claude-3-5-sonnet": {
+		maxTokens: 8192,
+		contextWindow: 200_000,
+		supportsImages: true,
+		supportsPromptCache: true,
+		inputPrice: 3.0,
+		outputPrice: 15.0,
+		cacheWritesPrice: 3.75,
+		cacheReadsPrice: 0.3,
 	},
 	"claude-3-5-sonnet-v2@20241022": {
 		maxTokens: 8192,

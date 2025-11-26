@@ -45,9 +45,16 @@
  * - `https_proxy` / `HTTPS_PROXY` - Proxy for HTTPS requests
  * - `no_proxy` / `NO_PROXY` - Comma-separated list of hosts to bypass proxy
  *
- * Note, `http_proxy` etc. MUST specify the protocol to use for the proxy,
- * for example, `https_proxy=http://proxy.corp.example:3128`. Simply specifying
- * the proxy hostname will result in errors.
+ * **Supported proxy protocols**:
+ * - HTTP proxies: `http://proxy.example:3128`
+ * - HTTPS proxies: `https://proxy.example:3128`
+ * - SOCKS4 proxies: `socks4://proxy.example:1080`
+ * - SOCKS5 proxies: `socks5://proxy.example:1080`
+ * - SOCKS proxies (auto-detect version): `socks://proxy.example:1080`
+ *
+ * Note: The proxy URL MUST specify the protocol. Simply specifying
+ * the proxy hostname (e.g., `proxy.example:3128`) will result in errors.
+ * Always include the protocol prefix.
  *
  * ## Certificate Trust
  *
@@ -67,8 +74,10 @@
  * ## Limitations in JetBrains & CLI
  *
  * - Proxy settings are static at startup--restart required for changes
- * - SOCKS proxies, PAC files not supported
+ * - PAC files not supported
  * - Proxy authentication via env vars only
+ * - When using SOCKS proxies, the same proxy is used for both HTTP and HTTPS
+ *   (the first SOCKS proxy found in https_proxy or http_proxy is used)
  *
  * These are not fundamental limitations, they just need integration work.
  *
@@ -93,9 +102,10 @@
  * ```
  */
 
-import { EnvHttpProxyAgent, setGlobalDispatcher, fetch as undiciFetch } from "undici"
+import { EnvHttpProxyAgent, ProxyAgent, fetch as undiciFetch } from "undici"
 
 let mockFetch: typeof globalThis.fetch | undefined
+let configuredDispatcher: ProxyAgent | EnvHttpProxyAgent | undefined
 
 /**
  * Platform-configured fetch that respects proxy settings.
@@ -111,13 +121,53 @@ export const fetch: typeof globalThis.fetch = (() => {
 	// Note: Don't use Logger here; it may not be initialized.
 
 	let baseFetch: typeof globalThis.fetch = globalThis.fetch
-	// Note: See esbuild.mjs, process.env.IS_STANDALONE is statically rewritten
-	// 'true' in the JetBrains/CLI build.
-	if (process.env.IS_STANDALONE) {
-		// Configure undici with ProxyAgent
-		const agent = new EnvHttpProxyAgent({})
-		setGlobalDispatcher(agent)
-		baseFetch = undiciFetch as any as typeof globalThis.fetch
+
+	try {
+		// Check for SOCKS proxy in environment variables
+		const httpsProxy = process.env.https_proxy || process.env.HTTPS_PROXY
+		const httpProxy = process.env.http_proxy || process.env.HTTP_PROXY
+		const proxy = httpsProxy || httpProxy
+
+		if (proxy) {
+			const proxyUrl = new URL(proxy)
+			const protocol = proxyUrl.protocol.replace(":", "")
+
+			// Use ProxyAgent for SOCKS proxies (required in both VSCode and standalone)
+			// VSCode's global fetch doesn't support SOCKS, so we must use undici
+			if (protocol === "socks" || protocol === "socks4" || protocol === "socks5") {
+				console.log(`[net] Configuring SOCKS proxy: ${protocol}://${proxyUrl.host}`)
+				configuredDispatcher = new ProxyAgent({
+					uri: proxy,
+					// ProxyAgent handles SOCKS protocols directly
+				})
+				baseFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+					return undiciFetch(input as any, { ...init, dispatcher: configuredDispatcher } as any) as any
+				}
+			} else if (protocol === "http" || protocol === "https") {
+				// For HTTP/HTTPS proxies in standalone mode, use EnvHttpProxyAgent
+				// In VSCode, use global fetch (VSCode handles HTTP/HTTPS proxies)
+				if (process.env.IS_STANDALONE) {
+					console.log(`[net] Configuring HTTP/HTTPS proxy from environment variables`)
+					configuredDispatcher = new EnvHttpProxyAgent()
+					baseFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+						return undiciFetch(input as any, { ...init, dispatcher: configuredDispatcher } as any) as any
+					}
+				}
+				// else: keep using globalThis.fetch in VSCode for HTTP/HTTPS
+			} else {
+				console.warn(`[net] Unsupported proxy protocol: ${protocol}, using default fetch`)
+			}
+		} else if (process.env.IS_STANDALONE) {
+			// No proxy configured in standalone mode, use undici fetch without proxy
+			baseFetch = undiciFetch as any as typeof globalThis.fetch
+		}
+		// else: No proxy in VSCode, keep using globalThis.fetch
+	} catch (error) {
+		// If proxy configuration fails, fall back appropriately
+		console.warn("Failed to configure proxy agent, using default fetch:", error)
+		if (process.env.IS_STANDALONE) {
+			baseFetch = undiciFetch as any as typeof globalThis.fetch
+		}
 	}
 
 	return (input: string | URL | Request, init?: RequestInit): Promise<Response> => (mockFetch || baseFetch)(input, init)
@@ -153,11 +203,12 @@ export function mockFetchForTesting<T>(theFetch: typeof globalThis.fetch, callba
 }
 
 /**
- * Returns axios configuration for fetch adapter mode with our configured fetch.
- * This ensures axios uses our platform-specific fetch implementation with
- * proper proxy configuration.
+ * Returns axios configuration for proper proxy support.
  *
- * @returns Configuration object with fetch adapter and configured fetch
+ * For SOCKS proxies or standalone mode, uses fetch adapter with our configured fetch.
+ * For VSCode with HTTP/HTTPS proxies, uses default http adapter (which VSCode configures).
+ *
+ * @returns Configuration object with appropriate adapter and settings
  *
  * @example
  * ```typescript
@@ -168,9 +219,53 @@ export function mockFetchForTesting<T>(theFetch: typeof globalThis.fetch, callba
  * })
  * ```
  */
-export function getAxiosSettings(): { adapter?: any; fetch?: typeof globalThis.fetch } {
-	return {
-		adapter: "fetch" as any,
-		fetch, // Use our configured fetch
+export function getAxiosSettings(): { adapter?: any; fetch?: typeof globalThis.fetch; dispatcher?: any } {
+	try {
+		// Check for proxy configuration
+		const httpsProxy = process.env.https_proxy || process.env.HTTPS_PROXY
+		const httpProxy = process.env.http_proxy || process.env.HTTP_PROXY
+		const proxy = httpsProxy || httpProxy
+
+		// Determine if we need fetch adapter
+		let needsFetchAdapter = false
+		let isSocksProxy = false
+
+		if (proxy) {
+			try {
+				const proxyUrl = new URL(proxy)
+				const protocol = proxyUrl.protocol.replace(":", "")
+
+				// SOCKS proxies MUST use fetch adapter with our configured fetch
+				if (protocol === "socks" || protocol === "socks4" || protocol === "socks5") {
+					console.log(`[net] Axios using SOCKS proxy via fetch adapter: ${protocol}://${proxyUrl.host}`)
+					needsFetchAdapter = true
+					isSocksProxy = true
+				}
+			} catch (error) {
+				console.warn("[net] Failed to parse proxy URL:", error)
+			}
+		}
+
+		// In standalone mode, always use fetch adapter
+		if (process.env.IS_STANDALONE) {
+			console.log("[net] Axios using fetch adapter in standalone mode")
+			needsFetchAdapter = true
+		}
+
+		if (needsFetchAdapter) {
+			// Use fetch adapter with our configured fetch (which has proxy support)
+			return {
+				adapter: "fetch" as any,
+				fetch, // Our configured fetch with ProxyAgent or EnvHttpProxyAgent
+			}
+		}
+
+		// In VSCode without SOCKS proxy, use default http adapter
+		// VSCode will automatically configure the proxy for the http adapter
+		console.log("[net] Axios using default http adapter (VSCode proxy support)")
+		return {}
+	} catch (error) {
+		console.warn("Failed to configure axios settings, using default:", error)
+		return {}
 	}
 }

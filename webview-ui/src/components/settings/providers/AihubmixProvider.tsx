@@ -42,11 +42,6 @@ export const AIhubmixProvider = ({ showModelOptions, isPopup, currentMode }: AIh
 		return base
 	}
 
-	console.log("selectedModelId", selectedModelId)
-	console.log("selectedModelInfo", selectedModelInfo)
-
-	// Get the normalized configuration
-
 	useEffect(() => {
 		try {
 			const cached = window.localStorage.getItem("aihubmixModels")
@@ -74,9 +69,7 @@ export const AIhubmixProvider = ({ showModelOptions, isPopup, currentMode }: AIh
 			.catch((error) => {
 				console.error("Failed to fetch AIhubmix models:", error)
 			})
-	}, [])
-
-	console.log("apiConfiguration", apiConfiguration)
+	}, [selectedModelId, selectedModelInfo])
 
 	return (
 		<div>
